@@ -7,12 +7,13 @@ from vnpy.event import Event, EventEngine
 from vnpy.trader.utility import extract_vt_symbol, save_json, load_json
 from vnpy.trader.engine import BaseEngine, MainEngine
 from vnpy.trader.object import (
-    OrderRequest, CancelRequest, SubscribeRequest,
+    OrderRequest, CancelRequest, QuoteData, QuoteRequest, SubscribeRequest,
     ContractData, OrderData, TradeData, TickData,
     LogData, PositionData, HistoryRequest, BarData
 )
 from vnpy.trader.event import (
     EVENT_ORDER,
+    EVENT_QUOTE,
     EVENT_TRADE,
     EVENT_TICK,
     EVENT_POSITION,
@@ -47,9 +48,12 @@ class PaperEngine(BaseEngine):
         self.instant_trade: bool = False
 
         self.order_count: int = 100000
+        self.quote_count: int = 100000
+        self.trade_count: int = 0
         self.timer_count: int = 0
 
         self.active_orders: Dict[str, Dict[str, OrderData]] = {}
+        self.active_quotes: Dict[str, Dict[str, QuoteData]] = {}
         self.gateway_map: Dict[str, str] = {}
         self.ticks: Dict[str, TickData] = {}
         self.positions: Dict[Tuple[str, Direction], PositionData] = {}
@@ -62,6 +66,8 @@ class PaperEngine(BaseEngine):
         main_engine.query_history = self.query_history
         main_engine.send_order = self.send_order
         main_engine.cancel_order = self.cancel_order
+        main_engine.send_quote = self.send_quote
+        main_engine.cancel_quote = self.cancel_quote
 
         self.load_setting()
         self.load_data()
@@ -96,14 +102,20 @@ class PaperEngine(BaseEngine):
             return
 
         active_orders = self.active_orders[tick.vt_symbol]
-        if not active_orders:
-            return
+        if active_orders:
+            for orderid, order in list(active_orders.items()):
+                self.cross_order(order, tick)
 
-        for orderid, order in list(active_orders.items()):
-            self.cross_order(order, tick)
+                if not order.is_active():
+                    active_orders.pop(orderid)
 
-            if not order.is_active():
-                active_orders.pop(orderid)
+        active_quotes = self.active_quotes[tick.vt_symbol]
+        if active_quotes:
+            for quoteid, quote in list(active_quotes.items()):
+                self.cross_quote(quote, tick)
+
+                if not quote.is_active():
+                    active_quotes.pop(quoteid)
 
     def process_timer_event(self, event: Event) -> None:
         """"""
@@ -195,7 +207,7 @@ class PaperEngine(BaseEngine):
 
     def cancel_order(self, req: CancelRequest, gateway_name: str) -> None:
         """"""
-        active_orders: Dict[str, OrderRequest] = self.active_orders[req.vt_symbol]
+        active_orders: Dict[str, OrderData] = self.active_orders[req.vt_symbol]
 
         if req.orderid in active_orders:
             order: OrderData = active_orders.pop(req.orderid)
@@ -217,6 +229,41 @@ class PaperEngine(BaseEngine):
             position.frozen -= order.volume
 
             self.put_event(EVENT_POSITION, copy(position))
+
+    def send_quote(self, req: QuoteRequest, gateway_name: str) -> str:
+        """"""
+        contract: ContractData = self.main_engine.get_contract(req.vt_symbol)
+        if not contract:
+            self.write_log(f"报价失败，找不到该合约{req.vt_symbol}")
+            return ""
+
+        self.quote_count += 1
+        now = datetime.now().strftime("%y%m%d%H%M%S")
+        quoteid = now + str(self.quote_count)
+        vt_quoteid = f"{GATEWAY_NAME}.{quoteid}"
+
+        # Put simulated order update event from gateway
+        quote = req.create_quote_data(quoteid, GATEWAY_NAME)
+        self.put_event(EVENT_QUOTE, copy(quote))
+
+        # Put simulated order update event from exchange
+        quote.datetime = datetime.now(LOCAL_TZ)
+        quote.status = Status.NOTTRADED
+        active_quotes = self.active_orders.setdefault(quote.vt_symbol, {})
+        active_quotes[quoteid] = quote
+
+        self.put_event(EVENT_QUOTE, copy(quote))
+
+        return vt_quoteid
+
+    def cancel_quote(self, req: CancelRequest, gateway_name: str) -> None:
+        """"""
+        active_quotes: Dict[str, QuoteData] = self.active_quotes[req.vt_symbol]
+
+        if req.orderid in active_quotes:
+            quote: QuoteData = active_quotes.pop(req.orderid)
+            quote.status = Status.CANCELLED
+            self.put_event(EVENT_QUOTE, copy(quote))
 
     def put_event(self, event_type: str, data: Any) -> None:
         """"""
@@ -305,6 +352,53 @@ class PaperEngine(BaseEngine):
                 volume=order.volume,
                 datetime=datetime.now(LOCAL_TZ),
                 gateway_name=order.gateway_name
+            )
+            self.put_event(EVENT_TRADE, trade)
+
+            self.update_position(trade, contract)
+
+    def cross_quote(self, quote: QuoteData, tick: TickData):
+        """"""
+        contract = self.main_engine.get_contract(quote.vt_symbol)
+
+        trade_price = 0
+
+        if tick.last_price >= quote.ask_price:
+            trade_price = quote.ask_price
+            
+            direction = Direction.SHORT
+            offset = Offset.CLOSE
+            volume = quote.ask_volume
+
+            quote.ask_volume = 0 
+        elif tick.last_price <= quote.bid_price:
+            trade_price = quote.bid_price
+            
+            direction = Direction.LONG
+            offset = Offset.OPEN
+            volume = quote.bid_volume
+
+            quote.bid_volume = 0            
+
+        if trade_price:
+            if not quote.bid_volume and not quote.ask_volume:
+                quote.status = Status.ALLTRADED
+            else:
+                quote.status = Status.PARTTRADED
+            self.put_event(EVENT_QUOTE, quote)
+
+            self.trade_count += 1
+            trade = TradeData(
+                symbol=quote.symbol,
+                exchange=quote.exchange,
+                orderid=str(self.trade_count),
+                tradeid=str(self.trade_count),
+                direction=direction,
+                offset=offset,
+                price=trade_price,
+                volume=volume,
+                datetime=datetime.now(LOCAL_TZ),
+                gateway_name=quote.gateway_name
             )
             self.put_event(EVENT_TRADE, trade)
 
