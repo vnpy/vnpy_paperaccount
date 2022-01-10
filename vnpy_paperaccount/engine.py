@@ -53,7 +53,7 @@ class PaperEngine(BaseEngine):
         self.timer_count: int = 0
 
         self.active_orders: Dict[str, Dict[str, OrderData]] = {}
-        self.active_quotes: Dict[str, Dict[str, QuoteData]] = {}
+        self.active_quotes: Dict[str, QuoteData] = {}
         self.gateway_map: Dict[str, str] = {}
         self.ticks: Dict[str, TickData] = {}
         self.positions: Dict[Tuple[str, Direction], PositionData] = {}
@@ -98,10 +98,7 @@ class PaperEngine(BaseEngine):
 
         self.ticks[tick.vt_symbol] = tick
 
-        if tick.vt_symbol not in self.active_orders:
-            return
-
-        active_orders = self.active_orders[tick.vt_symbol]
+        active_orders = self.active_orders.get(tick.vt_symbol, None)
         if active_orders:
             for orderid, order in list(active_orders.items()):
                 self.cross_order(order, tick)
@@ -109,13 +106,12 @@ class PaperEngine(BaseEngine):
                 if not order.is_active():
                     active_orders.pop(orderid)
 
-        active_quotes = self.active_quotes[tick.vt_symbol]
-        if active_quotes:
-            for quoteid, quote in list(active_quotes.items()):
-                self.cross_quote(quote, tick)
+        quote = self.active_quotes.get(tick.vt_symbol, None)
+        if quote:
+            self.cross_quote(quote, tick)
 
-                if not quote.is_active():
-                    active_quotes.pop(quoteid)
+            if not quote.is_active():
+                self.active_quotes.pop(tick.vt_symbol)
 
     def process_timer_event(self, event: Event) -> None:
         """"""
@@ -242,15 +238,20 @@ class PaperEngine(BaseEngine):
         quoteid = now + str(self.quote_count)
         vt_quoteid = f"{GATEWAY_NAME}.{quoteid}"
 
-        # Put simulated order update event from gateway
+        # Put simulated quote update event from gateway
         quote = req.create_quote_data(quoteid, GATEWAY_NAME)
         self.put_event(EVENT_QUOTE, copy(quote))
 
-        # Put simulated order update event from exchange
+        # Put old quote cancel event
+        if quote.vt_symbol in self.active_quotes:
+            old_quote = self.active_quotes.pop(quote.vt_symbol)
+            old_quote.status = Status.CANCELLED
+            self.put_event(EVENT_QUOTE, old_quote)
+
+        # Put simulated quote update event from exchange
         quote.datetime = datetime.now(LOCAL_TZ)
         quote.status = Status.NOTTRADED
-        active_quotes = self.active_orders.setdefault(quote.vt_symbol, {})
-        active_quotes[quoteid] = quote
+        self.active_quotes[quote.vt_symbol] = quote
 
         self.put_event(EVENT_QUOTE, copy(quote))
 
@@ -258,12 +259,16 @@ class PaperEngine(BaseEngine):
 
     def cancel_quote(self, req: CancelRequest, gateway_name: str) -> None:
         """"""
-        active_quotes: Dict[str, QuoteData] = self.active_quotes[req.vt_symbol]
+        quote: QuoteData = self.active_quotes.get(req.vt_symbol, None)
+        if not quote:
+            return
 
-        if req.orderid in active_quotes:
-            quote: QuoteData = active_quotes.pop(req.orderid)
-            quote.status = Status.CANCELLED
-            self.put_event(EVENT_QUOTE, copy(quote))
+        if req.orderid != quote.quoteid:
+            return
+
+        self.active_quotes.pop(req.vt_symbol)
+        quote.status = Status.CANCELLED
+        self.put_event(EVENT_QUOTE, copy(quote))
 
     def put_event(self, event_type: str, data: Any) -> None:
         """"""
@@ -363,22 +368,22 @@ class PaperEngine(BaseEngine):
 
         trade_price = 0
 
-        if tick.last_price >= quote.ask_price:
+        if tick.last_price >= quote.ask_price and quote.ask_volume:
             trade_price = quote.ask_price
-            
+
             direction = Direction.SHORT
             offset = Offset.CLOSE
             volume = quote.ask_volume
 
-            quote.ask_volume = 0 
-        elif tick.last_price <= quote.bid_price:
+            quote.ask_volume = 0
+        elif tick.last_price <= quote.bid_price and quote.bid_volume:
             trade_price = quote.bid_price
-            
+
             direction = Direction.LONG
             offset = Offset.OPEN
             volume = quote.bid_volume
 
-            quote.bid_volume = 0            
+            quote.bid_volume = 0
 
         if trade_price:
             if not quote.bid_volume and not quote.ask_volume:
