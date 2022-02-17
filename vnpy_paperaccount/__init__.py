@@ -43,4 +43,4 @@ class PaperAccountApp(BaseApp):
     display_name = "模拟交易"
     engine_class = PaperEngine
     widget_name = "PaperManager"
-    icon_name = "paper.ico"
+    icon_name = str(app_path.joinpath("ui", "paper.ico"))
