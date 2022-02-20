@@ -190,7 +190,7 @@ class PaperEngine(BaseEngine):
             self.put_event(EVENT_POSITION, copy(updated_position))
 
         # Cross order immediately with last tick data
-        if self.instant_trade:
+        if self.instant_trade and order.status != Status.REJECTED:
             tick = self.ticks.get(order.vt_symbol, None)
             if tick:
                 self.cross_order(order, tick)
@@ -296,6 +296,7 @@ class PaperEngine(BaseEngine):
 
             if order.volume > available:
                 order.status = Status.REJECTED
+                self.write_log("委托被拒单，可平仓位不足")
             else:
                 short_position.frozen += order.volume
                 return short_position
@@ -305,12 +306,10 @@ class PaperEngine(BaseEngine):
 
             if order.volume > available:
                 order.status = Status.REJECTED
+                self.write_log("委托被拒单，可平仓位不足")
             else:
                 long_position.frozen += order.volume
                 return long_position
-
-            if order.status == Status.REJECTED:
-                self.write_log(f"委托被拒单，可平仓位不足")
 
     def cross_order(self, order: OrderData, tick: TickData):
         """"""
