@@ -30,8 +30,8 @@ from vnpy.trader.constant import (
 
 
 LOCAL_TZ = get_localzone()
-APP_NAME: str = "PaperAccount"
-GATEWAY_NAME: str = "PAPER"
+APP_NAME = "PaperAccount"
+GATEWAY_NAME = "PAPER"
 
 
 class PaperEngine(BaseEngine):
@@ -98,7 +98,7 @@ class PaperEngine(BaseEngine):
 
         self.ticks[tick.vt_symbol] = tick
 
-        active_orders: dict = self.active_orders.get(tick.vt_symbol, None)
+        active_orders: Optional[dict] = self.active_orders.get(tick.vt_symbol, None)
         if active_orders:
             for orderid, order in list(active_orders.items()):
                 self.cross_order(order, tick)
@@ -106,7 +106,7 @@ class PaperEngine(BaseEngine):
                 if not order.is_active():
                     active_orders.pop(orderid)
 
-        quote: QuoteData = self.active_quotes.get(tick.vt_symbol, None)
+        quote: Optional[QuoteData] = self.active_quotes.get(tick.vt_symbol, None)
         if quote:
             self.cross_quote(quote, tick)
 
@@ -121,17 +121,17 @@ class PaperEngine(BaseEngine):
         self.timer_count = 0
 
         for position in self.positions.values():
-            contract: ContractData = self.main_engine.get_contract(position.vt_symbol)
+            contract: Optional[ContractData] = self.main_engine.get_contract(position.vt_symbol)
             if contract:
                 self.calculate_pnl(position)
                 self.put_event(EVENT_POSITION, copy(position))
 
     def calculate_pnl(self, position: PositionData) -> None:
         """"""
-        tick: TickData = self.ticks.get(position.vt_symbol, None)
+        tick: Optional[TickData] = self.ticks.get(position.vt_symbol, None)
 
         if tick:
-            contract: ContractData = self.main_engine.get_contract(position.vt_symbol)
+            contract: Optional[ContractData] = self.main_engine.get_contract(position.vt_symbol)
 
             if position.direction == Direction.SHORT:
                 multiplier: float = -position.volume * contract.size
@@ -159,7 +159,7 @@ class PaperEngine(BaseEngine):
 
     def send_order(self, req: OrderRequest, gateway_name: str) -> str:
         """"""
-        contract: ContractData = self.main_engine.get_contract(req.vt_symbol)
+        contract: Optional[ContractData] = self.main_engine.get_contract(req.vt_symbol)
         if not contract:
             self.write_log(f"委托失败，找不到该合约{req.vt_symbol}")
             return ""
@@ -191,7 +191,7 @@ class PaperEngine(BaseEngine):
 
         # Cross order immediately with last tick data
         if self.instant_trade and order.status != Status.REJECTED:
-            tick: TickData = self.ticks.get(order.vt_symbol, None)
+            tick: Optional[TickData] = self.ticks.get(order.vt_symbol, None)
             if tick:
                 self.cross_order(order, tick)
 
@@ -211,7 +211,7 @@ class PaperEngine(BaseEngine):
             self.put_event(EVENT_ORDER, copy(order))
 
             # Free frozen position volume
-            contract: ContractData = self.main_engine.get_contract(order.vt_symbol)
+            contract: Optional[ContractData] = self.main_engine.get_contract(order.vt_symbol)
             if contract.net_position:
                 return
 
@@ -228,7 +228,7 @@ class PaperEngine(BaseEngine):
 
     def send_quote(self, req: QuoteRequest, gateway_name: str) -> str:
         """"""
-        contract: ContractData = self.main_engine.get_contract(req.vt_symbol)
+        contract: Optional[ContractData] = self.main_engine.get_contract(req.vt_symbol)
         if not contract:
             self.write_log(f"报价失败，找不到该合约{req.vt_symbol}")
             return ""
@@ -259,7 +259,7 @@ class PaperEngine(BaseEngine):
 
     def cancel_quote(self, req: CancelRequest, gateway_name: str) -> None:
         """"""
-        quote: QuoteData = self.active_quotes.get(req.vt_symbol, None)
+        quote: Optional[QuoteData] = self.active_quotes.get(req.vt_symbol, None)
         if not quote:
             return
 
@@ -313,7 +313,7 @@ class PaperEngine(BaseEngine):
 
     def cross_order(self, order: OrderData, tick: TickData) -> None:
         """"""
-        contract: ContractData = self.main_engine.get_contract(order.vt_symbol)
+        contract: Optional[ContractData] = self.main_engine.get_contract(order.vt_symbol)
 
         trade_price = 0
 
@@ -363,7 +363,7 @@ class PaperEngine(BaseEngine):
 
     def cross_quote(self, quote: QuoteData, tick: TickData) -> None:
         """"""
-        contract: ContractData = self.main_engine.get_contract(quote.vt_symbol)
+        contract: Optional[ContractData] = self.main_engine.get_contract(quote.vt_symbol)
 
         trade_price = 0
 
@@ -416,15 +416,15 @@ class PaperEngine(BaseEngine):
         if contract.net_position:
             position: PositionData = self.get_position(vt_symbol, Direction.NET)
 
-            old_volume = position.volume
-            old_cost = position.volume * position.price
+            old_volume: float = position.volume
+            old_cost: float = position.volume * position.price
 
             if trade.direction == Direction.LONG:
                 pos_change = trade.volume
             else:
                 pos_change = -trade.volume
 
-            new_volume = position.volume + pos_change
+            new_volume: float = position.volume + pos_change
 
             # No position holding, clear price
             if not new_volume:
