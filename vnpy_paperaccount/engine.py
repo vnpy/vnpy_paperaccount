@@ -1,10 +1,10 @@
 from copy import copy
 from typing import Any, Dict, Tuple, Optional, List
 from datetime import datetime
-from tzlocal import get_localzone
+from tzlocal import get_localzone_name
 
 from vnpy.event import Event, EventEngine
-from vnpy.trader.utility import extract_vt_symbol, save_json, load_json
+from vnpy.trader.utility import extract_vt_symbol, save_json, load_json, ZoneInfo
 from vnpy.trader.engine import BaseEngine, MainEngine
 from vnpy.trader.object import (
     OrderRequest, CancelRequest, QuoteData, QuoteRequest, SubscribeRequest,
@@ -29,7 +29,7 @@ from vnpy.trader.constant import (
 )
 
 
-LOCAL_TZ = get_localzone()
+LOCAL_TZ = ZoneInfo(get_localzone_name())
 APP_NAME = "PaperAccount"
 GATEWAY_NAME = "PAPER"
 
