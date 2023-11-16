@@ -73,6 +73,8 @@ class PaperEngine(BaseEngine):
         self.load_data()
         self.register_event()
 
+        self.ib_connected: bool = "IB" in main_engine.get_all_gateway_names()
+
     def register_event(self) -> None:
         """"""
         self.event_engine.register(EVENT_CONTRACT, self.process_contract_event)
@@ -146,6 +148,8 @@ class PaperEngine(BaseEngine):
         original_gateway_name: str = self.gateway_map.get(req.vt_symbol, "")
         if original_gateway_name:
             self._subscribe(req, original_gateway_name)
+        elif self.ib_connected:
+            self._subscribe(req, "IB")
         else:
             self.write_log(f"订阅行情失败，找不到该合约{req.vt_symbol}")
 
@@ -154,6 +158,8 @@ class PaperEngine(BaseEngine):
         original_gateway_name: str = self.gateway_map.get(req.vt_symbol, "")
         if original_gateway_name:
             return self._query_history(req, original_gateway_name)
+        elif self.ib_connected:
+            self._subscribe(req, "IB")
         else:
             return None
 
