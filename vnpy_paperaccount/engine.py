@@ -74,7 +74,10 @@ class PaperEngine(BaseEngine):
         self.load_data()
         self.register_event()
 
-        self.ib_gateway: BaseGateway = main_engine.get_gateway("IB")
+        if "IB" in main_engine.get_all_gateway_names():
+            self.ib_gateway: BaseGateway = main_engine.get_gateway("IB")
+        else:
+            self.ib_gateway = None
 
     def register_event(self) -> None:
         """"""
