@@ -30,18 +30,21 @@ class PaperManager(QtWidgets.QWidget):
 
         interval_spin: QtWidgets.QSpinBox = QtWidgets.QSpinBox()
         interval_spin.setMinimum(1)
-        interval_spin.setValue(self.paper_engine.timer_interval)
+        timer_interval: int = self.paper_engine.get_timer_interval()
+        interval_spin.setValue(timer_interval)
         interval_spin.setSuffix(" 秒")
         interval_spin.valueChanged.connect(self.paper_engine.set_timer_interval)
 
         slippage_spin: QtWidgets.QSpinBox = QtWidgets.QSpinBox()
         slippage_spin.setMinimum(0)
-        slippage_spin.setValue(self.paper_engine.trade_slippage)
+        trade_slippage: int = self.paper_engine.get_trade_slippage()
+        slippage_spin.setValue(trade_slippage)
         slippage_spin.setSuffix(" 跳")
         slippage_spin.valueChanged.connect(self.paper_engine.set_trade_slippage)
 
         instant_check: QtWidgets.QCheckBox = QtWidgets.QCheckBox()
-        instant_check.setChecked(self.paper_engine.instant_trade)
+        instant_trade: bool = self.paper_engine.get_instant_trade()
+        instant_check.setChecked(instant_trade)
         instant_check.stateChanged.connect(self.paper_engine.set_instant_trade)
 
         clear_button: QtWidgets.QPushButton = QtWidgets.QPushButton("清空所有持仓")

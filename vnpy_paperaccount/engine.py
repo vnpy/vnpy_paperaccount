@@ -591,3 +591,15 @@ class PaperEngine(BaseEngine):
         """"""
         self.instant_trade = bool(instant_trade)
         self.save_setting()
+
+    def get_trade_slippage(self) -> int:
+        """"""
+        return self.trade_slippage
+
+    def get_timer_interval(self) -> int:
+        """"""
+        return self.timer_interval
+
+    def get_instant_trade(self) -> bool:
+        """"""
+        return self.instant_trade
