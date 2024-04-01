@@ -1,5 +1,5 @@
 from copy import copy
-from typing import Any, Dict, Tuple, Optional, List
+from typing import Optional
 from datetime import datetime
 from tzlocal import get_localzone_name
 
@@ -53,11 +53,11 @@ class PaperEngine(BaseEngine):
         self.trade_count: int = 0
         self.timer_count: int = 0
 
-        self.active_orders: Dict[str, Dict[str, OrderData]] = {}
-        self.active_quotes: Dict[str, QuoteData] = {}
-        self.gateway_map: Dict[str, str] = {}
-        self.ticks: Dict[str, TickData] = {}
-        self.positions: Dict[Tuple[str, Direction], PositionData] = {}
+        self.active_orders: dict[str, dict[str, OrderData]] = {}
+        self.active_quotes: dict[str, QuoteData] = {}
+        self.gateway_map: dict[str, str] = {}
+        self.ticks: dict[str, TickData] = {}
+        self.positions: dict[tuple[str, Direction], PositionData] = {}
 
         # Patch main engine functions
         self._subscribe = main_engine.subscribe
@@ -157,7 +157,7 @@ class PaperEngine(BaseEngine):
         else:
             self.write_log(f"订阅行情失败，找不到该合约{req.vt_symbol}")
 
-    def query_history(self, req: HistoryRequest, gateway_name: str) -> List[BarData]:
+    def query_history(self, req: HistoryRequest, gateway_name: str) -> list[BarData]:
         """"""
         original_gateway_name: str = self.gateway_map.get(req.vt_symbol, "")
         if original_gateway_name:
@@ -213,7 +213,7 @@ class PaperEngine(BaseEngine):
 
     def cancel_order(self, req: CancelRequest, gateway_name: str) -> None:
         """"""
-        active_orders: Dict[str, OrderData] = self.active_orders[req.vt_symbol]
+        active_orders: dict[str, OrderData] = self.active_orders[req.vt_symbol]
 
         if req.orderid in active_orders:
             order: OrderData = active_orders.pop(req.orderid)
@@ -280,7 +280,7 @@ class PaperEngine(BaseEngine):
         quote.status = Status.CANCELLED
         self.put_event(EVENT_QUOTE, copy(quote))
 
-    def put_event(self, event_type: str, data: Any) -> None:
+    def put_event(self, event_type: str, data: object) -> None:
         """"""
         event: Event = Event(event_type, data)
         self.event_engine.put(event)
