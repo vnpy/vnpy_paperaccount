@@ -169,6 +169,10 @@ class PaperEngine(BaseEngine):
 
     def send_order(self, req: OrderRequest, gateway_name: str) -> str:
         """"""
+        if not req.volume:
+            self.write_log("委托数量非法，请检查")
+            return ""
+
         contract: Optional[ContractData] = self.main_engine.get_contract(req.vt_symbol)
         if not contract:
             self.write_log(f"委托失败，找不到该合约{req.vt_symbol}")
