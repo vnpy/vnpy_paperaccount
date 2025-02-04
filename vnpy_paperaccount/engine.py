@@ -34,6 +34,11 @@ LOCAL_TZ = ZoneInfo(get_localzone_name())
 APP_NAME = "PaperAccount"
 GATEWAY_NAME = "PAPER"
 
+EVENT_PAPER_NEW_ORDER = "ePaperNewOrder"
+EVENT_PAPER_CANCEL_ORDER = "ePaperCancelOrder"
+EVENT_PAPER_NEW_QUOTE = "ePaperNewQuote"
+EVENT_PAPER_CANCEL_QUOTE = "ePaperCancelQuote"
+
 
 class PaperEngine(BaseEngine):
     """"""
@@ -84,6 +89,11 @@ class PaperEngine(BaseEngine):
         self.event_engine.register(EVENT_CONTRACT, self.process_contract_event)
         self.event_engine.register(EVENT_TICK, self.process_tick_event)
         self.event_engine.register(EVENT_TIMER, self.process_timer_event)
+
+        self.event_engine.register(EVENT_PAPER_NEW_ORDER, self.process_new_order_event)
+        self.event_engine.register(EVENT_PAPER_CANCEL_ORDER, self.process_cancel_order_event)
+        self.event_engine.register(EVENT_PAPER_NEW_QUOTE, self.process_new_quote_event)
+        self.event_engine.register(EVENT_PAPER_CANCEL_QUOTE, self.process_cancel_quote_event)
 
     def process_contract_event(self, event: Event) -> None:
         """"""
@@ -186,8 +196,16 @@ class PaperEngine(BaseEngine):
         # Put simulated order update event from gateway
         order: OrderData = req.create_order_data(orderid, GATEWAY_NAME)
         self.put_event(EVENT_ORDER, copy(order))
+        self.put_event(EVENT_PAPER_NEW_ORDER, order)
 
+        return vt_orderid
+
+    def process_new_order_event(self, event: Event) -> None:
+        """"""
         # Check if order is valid
+        order: OrderData = event.data
+        contract = self.main_engine.get_contract(order.vt_symbol)
+
         updated_position: PositionData = self.check_order_valid(order, contract)
 
         # Put simulated order update event from exchange
@@ -195,7 +213,7 @@ class PaperEngine(BaseEngine):
             order.datetime = datetime.now(LOCAL_TZ)
             order.status = Status.NOTTRADED
             active_orders: dict = self.active_orders.setdefault(order.vt_symbol, {})
-            active_orders[orderid] = order
+            active_orders[order.orderid] = order
 
         self.put_event(EVENT_ORDER, copy(order))
 
@@ -211,12 +229,16 @@ class PaperEngine(BaseEngine):
 
                 if not order.is_active():
                     active_orders: dict = self.active_orders[order.vt_symbol]
-                    active_orders.pop(orderid)
-
-        return vt_orderid
+                    active_orders.pop(order.orderid)
 
     def cancel_order(self, req: CancelRequest, gateway_name: str) -> None:
         """"""
+        self.put_event(EVENT_PAPER_CANCEL_ORDER, req)
+
+    def process_cancel_order_event(self, event: Event) -> None:
+        """"""
+        req: CancelRequest = event.data
+
         active_orders: dict[str, OrderData] = self.active_orders[req.vt_symbol]
 
         if req.orderid in active_orders:
@@ -255,7 +277,13 @@ class PaperEngine(BaseEngine):
         # Put simulated quote update event from gateway
         quote: QuoteData = req.create_quote_data(quoteid, GATEWAY_NAME)
         self.put_event(EVENT_QUOTE, copy(quote))
+        self.put_event(EVENT_PAPER_NEW_QUOTE, quote)
 
+        return vt_quoteid
+    
+    def process_new_quote_event(self, event: Event) -> None:
+        """"""
+        quote: QuoteData = event.data
         # Put old quote cancel event
         if quote.vt_symbol in self.active_quotes:
             old_quote: QuoteData = self.active_quotes.pop(quote.vt_symbol)
@@ -269,10 +297,14 @@ class PaperEngine(BaseEngine):
 
         self.put_event(EVENT_QUOTE, copy(quote))
 
-        return vt_quoteid
-
     def cancel_quote(self, req: CancelRequest, gateway_name: str) -> None:
         """"""
+        self.put_event(EVENT_PAPER_CANCEL_QUOTE, req)
+
+    def process_cancel_quote_event(self, event: Event) -> None:
+        """"""
+        req: CancelRequest = event.data
+
         quote: Optional[QuoteData] = self.active_quotes.get(req.vt_symbol, None)
         if not quote:
             return
