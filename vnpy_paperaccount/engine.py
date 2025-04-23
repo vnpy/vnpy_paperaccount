@@ -1,5 +1,4 @@
 from copy import copy
-from typing import Optional
 from datetime import datetime
 from tzlocal import get_localzone_name
 
@@ -114,7 +113,7 @@ class PaperEngine(BaseEngine):
 
         self.ticks[tick.vt_symbol] = tick
 
-        active_orders: Optional[dict] = self.active_orders.get(tick.vt_symbol, None)
+        active_orders: dict | None = self.active_orders.get(tick.vt_symbol, None)
         if active_orders:
             for orderid, order in list(active_orders.items()):
                 self.cross_order(order, tick)
@@ -122,7 +121,7 @@ class PaperEngine(BaseEngine):
                 if not order.is_active():
                     active_orders.pop(orderid)
 
-        quote: Optional[QuoteData] = self.active_quotes.get(tick.vt_symbol, None)
+        quote: QuoteData | None = self.active_quotes.get(tick.vt_symbol, None)
         if quote:
             self.cross_quote(quote, tick)
 
@@ -137,17 +136,17 @@ class PaperEngine(BaseEngine):
         self.timer_count = 0
 
         for position in self.positions.values():
-            contract: Optional[ContractData] = self.main_engine.get_contract(position.vt_symbol)
+            contract: ContractData | None = self.main_engine.get_contract(position.vt_symbol)
             if contract:
                 self.calculate_pnl(position)
                 self.put_event(EVENT_POSITION, copy(position))
 
     def calculate_pnl(self, position: PositionData) -> None:
         """"""
-        tick: Optional[TickData] = self.ticks.get(position.vt_symbol, None)
+        tick: TickData | None = self.ticks.get(position.vt_symbol, None)
 
         if tick:
-            contract: Optional[ContractData] = self.main_engine.get_contract(position.vt_symbol)
+            contract: ContractData | None = self.main_engine.get_contract(position.vt_symbol)
 
             if position.direction == Direction.SHORT:
                 multiplier: float = -position.volume * contract.size
@@ -183,7 +182,7 @@ class PaperEngine(BaseEngine):
             self.write_log("委托数量非法，请检查")
             return ""
 
-        contract: Optional[ContractData] = self.main_engine.get_contract(req.vt_symbol)
+        contract: ContractData | None = self.main_engine.get_contract(req.vt_symbol)
         if not contract:
             self.write_log(f"委托失败，找不到该合约{req.vt_symbol}")
             return ""
@@ -223,7 +222,7 @@ class PaperEngine(BaseEngine):
 
         # Cross order immediately with last tick data
         if self.instant_trade and order.status != Status.REJECTED:
-            tick: Optional[TickData] = self.ticks.get(order.vt_symbol, None)
+            tick: TickData | None = self.ticks.get(order.vt_symbol, None)
             if tick:
                 self.cross_order(order, tick)
 
@@ -247,7 +246,7 @@ class PaperEngine(BaseEngine):
             self.put_event(EVENT_ORDER, copy(order))
 
             # Free frozen position volume
-            contract: Optional[ContractData] = self.main_engine.get_contract(order.vt_symbol)
+            contract: ContractData | None = self.main_engine.get_contract(order.vt_symbol)
             if contract.net_position:
                 return
 
@@ -264,7 +263,7 @@ class PaperEngine(BaseEngine):
 
     def send_quote(self, req: QuoteRequest, gateway_name: str) -> str:
         """"""
-        contract: Optional[ContractData] = self.main_engine.get_contract(req.vt_symbol)
+        contract: ContractData | None = self.main_engine.get_contract(req.vt_symbol)
         if not contract:
             self.write_log(f"报价失败，找不到该合约{req.vt_symbol}")
             return ""
@@ -280,7 +279,7 @@ class PaperEngine(BaseEngine):
         self.put_event(EVENT_PAPER_NEW_QUOTE, quote)
 
         return vt_quoteid
-    
+
     def process_new_quote_event(self, event: Event) -> None:
         """"""
         quote: QuoteData = event.data
@@ -305,7 +304,7 @@ class PaperEngine(BaseEngine):
         """"""
         req: CancelRequest = event.data
 
-        quote: Optional[QuoteData] = self.active_quotes.get(req.vt_symbol, None)
+        quote: QuoteData | None = self.active_quotes.get(req.vt_symbol, None)
         if not quote:
             return
 
@@ -321,7 +320,7 @@ class PaperEngine(BaseEngine):
         event: Event = Event(event_type, data)
         self.event_engine.put(event)
 
-    def check_order_valid(self, order: OrderData, contract: ContractData) -> Optional[PositionData]:
+    def check_order_valid(self, order: OrderData, contract: ContractData) -> PositionData | None:
         """"""
         # Reject unsupported order type
         if order.type in {OrderType.FAK, OrderType.FOK, OrderType.RFQ}:
@@ -359,7 +358,7 @@ class PaperEngine(BaseEngine):
 
     def cross_order(self, order: OrderData, tick: TickData) -> None:
         """"""
-        contract: Optional[ContractData] = self.main_engine.get_contract(order.vt_symbol)
+        contract: ContractData | None = self.main_engine.get_contract(order.vt_symbol)
 
         trade_price = 0
 
@@ -409,7 +408,7 @@ class PaperEngine(BaseEngine):
 
     def cross_quote(self, quote: QuoteData, tick: TickData) -> None:
         """"""
-        contract: Optional[ContractData] = self.main_engine.get_contract(quote.vt_symbol)
+        contract: ContractData | None = self.main_engine.get_contract(quote.vt_symbol)
 
         trade_price = 0
 
