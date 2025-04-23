@@ -144,14 +144,14 @@ class PaperEngine(BaseEngine):
     def calculate_pnl(self, position: PositionData) -> None:
         """"""
         tick: TickData | None = self.ticks.get(position.vt_symbol, None)
+        contract: ContractData | None = self.main_engine.get_contract(position.vt_symbol)
 
-        if tick:
-            contract: ContractData | None = self.main_engine.get_contract(position.vt_symbol)
+        if tick and contract:
 
             if position.direction == Direction.SHORT:
                 multiplier: float = -position.volume * contract.size
             else:
-                multiplier: float = position.volume * contract.size
+                multiplier = position.volume * contract.size
 
             position.pnl = (tick.last_price - position.price) * multiplier
             position.pnl = round(position.pnl, 2)
@@ -166,13 +166,15 @@ class PaperEngine(BaseEngine):
         else:
             self.write_log(f"订阅行情失败，找不到该合约{req.vt_symbol}")
 
-    def query_history(self, req: HistoryRequest, gateway_name: str) -> list[BarData]:
+    def query_history(self, req: HistoryRequest, gateway_name: str) -> list[BarData] | None:
         """"""
         original_gateway_name: str = self.gateway_map.get(req.vt_symbol, "")
         if original_gateway_name:
-            return self._query_history(req, original_gateway_name)
+            data: list[BarData] = self._query_history(req, original_gateway_name)
+            return data
         elif self.ib_gateway and req.exchange in self.ib_gateway.exchanges:
-            self._subscribe(req, "IB")
+            data = self._query_history(req, "IB")
+            return data
         else:
             return None
 
@@ -227,7 +229,7 @@ class PaperEngine(BaseEngine):
                 self.cross_order(order, tick)
 
                 if not order.is_active():
-                    active_orders: dict = self.active_orders[order.vt_symbol]
+                    active_orders = self.active_orders[order.vt_symbol]
                     active_orders.pop(order.orderid)
 
     def cancel_order(self, req: CancelRequest, gateway_name: str) -> None:
@@ -246,7 +248,7 @@ class PaperEngine(BaseEngine):
             self.put_event(EVENT_ORDER, copy(order))
 
             # Free frozen position volume
-            contract: ContractData | None = self.main_engine.get_contract(order.vt_symbol)
+            contract: ContractData = self.main_engine.get_contract(order.vt_symbol)
             if contract.net_position:
                 return
 
@@ -256,7 +258,7 @@ class PaperEngine(BaseEngine):
             if order.direction == Direction.LONG:
                 position: PositionData = self.get_position(order.vt_symbol, Direction.SHORT)
             else:
-                position: PositionData = self.get_position(order.vt_symbol, Direction.LONG)
+                position = self.get_position(order.vt_symbol, Direction.LONG)
             position.frozen -= order.volume
 
             self.put_event(EVENT_POSITION, copy(position))
@@ -333,7 +335,7 @@ class PaperEngine(BaseEngine):
 
         # Reject close order if no more available position
         if contract.net_position or order.offset == Offset.OPEN:
-            return
+            return None
 
         if order.direction == Direction.LONG:
             short_position: PositionData = self.get_position(order.vt_symbol, Direction.SHORT)
@@ -347,7 +349,7 @@ class PaperEngine(BaseEngine):
                 return short_position
         else:
             long_position: PositionData = self.get_position(order.vt_symbol, Direction.LONG)
-            available: float = long_position.volume - long_position.frozen
+            available = long_position.volume - long_position.frozen
 
             if order.volume > available:
                 order.status = Status.REJECTED
@@ -356,9 +358,11 @@ class PaperEngine(BaseEngine):
                 long_position.frozen += order.volume
                 return long_position
 
+        return None
+
     def cross_order(self, order: OrderData, tick: TickData) -> None:
         """"""
-        contract: ContractData | None = self.main_engine.get_contract(order.vt_symbol)
+        contract: ContractData = self.main_engine.get_contract(order.vt_symbol)
 
         trade_price = 0
 
@@ -423,8 +427,8 @@ class PaperEngine(BaseEngine):
         elif tick.last_price <= quote.bid_price and quote.bid_volume:
             trade_price = quote.bid_price
 
-            direction: Direction = Direction.LONG
-            offset: Offset = Offset.OPEN
+            direction = Direction.LONG
+            offset = Offset.OPEN
             volume = quote.bid_volume
 
             quote.bid_volume = 0
