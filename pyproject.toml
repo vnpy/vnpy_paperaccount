@@ -1,7 +1,7 @@
 [project]
 name = "vnpy_paperaccount"
 dynamic = ["version"]
-description = "Algorithm trading application for VeighNa quant trading framework."
+description = "Paper account application for VeighNa quant trading framework."
 readme = "README.md"
 license = {text = "MIT"}
 authors = [{name = "Xiaoyou Chen", email = "xiaoyou.chen@mail.vnpy.com"}]
