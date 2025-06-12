@@ -5,9 +5,9 @@
 </p>
 
 <p align="center">
-    <img src ="https://img.shields.io/badge/version-1.0.6-blueviolet.svg"/>
+    <img src ="https://img.shields.io/badge/version-1.1.0-blueviolet.svg"/>
     <img src ="https://img.shields.io/badge/platform-windows|linux|macos-yellow.svg"/>
-    <img src ="https://img.shields.io/badge/python-3.10|3.11|3.12-blue.svg" />
+    <img src ="https://img.shields.io/badge/python-3.10|3.11|3.12|3.13-blue.svg" />
     <img src ="https://img.shields.io/github/license/vnpy/vnpy.svg?color=orange"/>
 </p>
 
@@ -17,7 +17,7 @@ PaperAccount是用于本地仿真交易的功能模块，用户可以通过其UI
 
 ## 安装
 
-安装环境推荐基于3.9.0版本以上的【[**VeighNa Studio**](https://www.vnpy.com)】。
+安装环境推荐基于4.0.0版本以上的【[**VeighNa Studio**](https://www.vnpy.com)】。
 
 直接使用pip命令：
 

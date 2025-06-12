@@ -22,17 +22,20 @@
 
 
 from pathlib import Path
-import importlib_metadata
 
 from vnpy.trader.app import BaseApp
 
 from .engine import PaperEngine, APP_NAME
 
 
-try:
-    __version__ = importlib_metadata.version("vnpy_paperaccount")
-except importlib_metadata.PackageNotFoundError:
-    __version__ = "dev"
+__all__ = [
+    "PaperEngine",
+    "APP_NAME",
+    "PaperAccountApp",
+]
+
+
+__version__ = "1.1.0"
 
 
 class PaperAccountApp(BaseApp):
@@ -41,6 +44,6 @@ class PaperAccountApp(BaseApp):
     app_module: str = __module__
     app_path: Path = Path(__file__).parent
     display_name: str = "模拟交易"
-    engine_class: PaperEngine = PaperEngine
+    engine_class: type[PaperEngine] = PaperEngine
     widget_name: str = "PaperManager"
     icon_name: str = str(app_path.joinpath("ui", "paper.ico"))
