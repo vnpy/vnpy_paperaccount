@@ -83,6 +83,8 @@ class PaperEngine(BaseEngine):
         else:
             self.ib_gateway = None
 
+        self.paper_noticed: bool = False
+
     def register_event(self) -> None:
         """"""
         self.event_engine.register(EVENT_CONTRACT, self.process_contract_event)
@@ -180,6 +182,10 @@ class PaperEngine(BaseEngine):
 
     def send_order(self, req: OrderRequest, gateway_name: str) -> str:
         """"""
+        if not self.paper_noticed:
+            self.write_log("PaperAccount模拟交易运行中，所有委托请求将不会发往交易接口")
+            self.paper_noticed = True
+
         if not req.volume:
             self.write_log("委托数量非法，请检查")
             return ""
