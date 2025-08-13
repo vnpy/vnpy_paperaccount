@@ -27,6 +27,7 @@ from vnpy.trader.constant import (
     Direction,
     Offset
 )
+from vnpy.trader.converter import OffsetConverter
 
 
 LOCAL_TZ = ZoneInfo(get_localzone_name())
@@ -101,6 +102,10 @@ class PaperEngine(BaseEngine):
         contract: ContractData = event.data
         self.gateway_map[contract.vt_symbol] = contract.gateway_name
         contract.gateway_name = GATEWAY_NAME
+
+        oms = self.main_engine.get_engine('oms')
+        if contract.gateway_name not in oms.offset_converters:
+            oms.offset_converters[GATEWAY_NAME] = OffsetConverter(oms_engine=oms)
 
         for direciton in Direction:
             key: tuple = (contract.vt_symbol, direciton)
