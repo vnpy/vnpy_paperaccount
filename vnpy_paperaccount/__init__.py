@@ -1,4 +1,5 @@
 # The MIT License (MIT)
+"""模拟交易应用包。"""
 
 # Copyright (c) 2015-present, Xiaoyou Chen
 
@@ -39,7 +40,7 @@ __version__ = "1.1.0"
 
 
 class PaperAccountApp(BaseApp):
-    """"""
+    """模拟交易应用。"""
     app_name: str = APP_NAME
     app_module: str = __module__
     app_path: Path = Path(__file__).parent

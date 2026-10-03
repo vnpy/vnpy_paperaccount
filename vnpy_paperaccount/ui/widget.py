@@ -1,3 +1,4 @@
+"""模拟交易管理界面。"""
 from vnpy.event import EventEngine
 from vnpy.trader.engine import MainEngine
 from vnpy.trader.ui import QtWidgets
@@ -9,10 +10,10 @@ from ..engine import (
 
 
 class PaperManager(QtWidgets.QWidget):
-    """"""
+    """模拟交易管理界面。"""
 
     def __init__(self, main_engine: MainEngine, event_engine: EventEngine) -> None:
-        """"""
+        """取得模拟交易引擎并初始化界面。"""
         super().__init__()
 
         self.main_engine: MainEngine = main_engine
@@ -23,7 +24,7 @@ class PaperManager(QtWidgets.QWidget):
         self.init_ui()
 
     def init_ui(self) -> None:
-        """"""
+        """搭建成交滑点、盈亏计算频率、立即撮合和清空持仓控件。"""
         self.setWindowTitle("模拟交易")
         self.setFixedHeight(200)
         self.setFixedWidth(500)

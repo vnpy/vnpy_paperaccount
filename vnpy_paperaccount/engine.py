@@ -1,3 +1,4 @@
+"""本地撮合的模拟交易引擎。"""
 from copy import copy
 from datetime import datetime
 from tzlocal import get_localzone_name
@@ -40,12 +41,12 @@ EVENT_PAPER_CANCEL_QUOTE = "ePaperCancelQuote"
 
 
 class PaperEngine(BaseEngine):
-    """"""
+    """本地撮合的模拟交易引擎。"""
     setting_filename: str = "paper_account_setting.json"
     data_filename: str = "paper_account_data.json"
 
     def __init__(self, main_engine: MainEngine, event_engine: EventEngine) -> None:
-        """"""
+        """初始化模拟账户，并接管主引擎的订阅、历史查询、委托和报价。"""
         super().__init__(main_engine, event_engine, APP_NAME)
 
         self.trade_slippage: int = 0
@@ -86,7 +87,7 @@ class PaperEngine(BaseEngine):
         self.paper_noticed: bool = False
 
     def register_event(self) -> None:
-        """"""
+        """监听合约、行情、定时器以及模拟委托和报价事件。"""
         self.event_engine.register(EVENT_CONTRACT, self.process_contract_event)
         self.event_engine.register(EVENT_TICK, self.process_tick_event)
         self.event_engine.register(EVENT_TIMER, self.process_timer_event)
@@ -97,7 +98,7 @@ class PaperEngine(BaseEngine):
         self.event_engine.register(EVENT_PAPER_CANCEL_QUOTE, self.process_cancel_quote_event)
 
     def process_contract_event(self, event: Event) -> None:
-        """"""
+        """记下合约原接口后改成模拟接口，并推送已有持仓。"""
         contract: ContractData = event.data
         self.gateway_map[contract.vt_symbol] = contract.gateway_name
         contract.gateway_name = GATEWAY_NAME
@@ -109,7 +110,7 @@ class PaperEngine(BaseEngine):
                 self.put_event(EVENT_POSITION, position)
 
     def process_tick_event(self, event: Event) -> None:
-        """"""
+        """缓存行情，并用它对活动委托和报价撮合。"""
         tick: TickData = event.data
         tick.gateway_name = GATEWAY_NAME
 
@@ -131,7 +132,7 @@ class PaperEngine(BaseEngine):
                 self.active_quotes.pop(tick.vt_symbol)
 
     def process_timer_event(self, event: Event) -> None:
-        """"""
+        """每隔定时器间隔按最新价重算持仓盈亏并推送。"""
         self.timer_count += 1
         if self.timer_count < self.timer_interval:
             return
@@ -144,7 +145,7 @@ class PaperEngine(BaseEngine):
                 self.put_event(EVENT_POSITION, copy(position))
 
     def calculate_pnl(self, position: PositionData) -> None:
-        """"""
+        """有行情和合约时，按最新价与持仓价的差计算盈亏。"""
         tick: TickData | None = self.ticks.get(position.vt_symbol, None)
         contract: ContractData | None = self.main_engine.get_contract(position.vt_symbol)
 
@@ -159,7 +160,7 @@ class PaperEngine(BaseEngine):
             position.pnl = round(position.pnl, 2)
 
     def subscribe(self, req: SubscribeRequest, gateway_name: str) -> None:
-        """"""
+        """优先用原接口订阅，否则在 IB 支持该交易所时交给 IB，都没有则写失败日志。"""
         original_gateway_name: str = self.gateway_map.get(req.vt_symbol, "")
         if original_gateway_name:
             self._subscribe(req, original_gateway_name)
@@ -169,7 +170,7 @@ class PaperEngine(BaseEngine):
             self.write_log(f"订阅行情失败，找不到该合约{req.vt_symbol}")
 
     def query_history(self, req: HistoryRequest, gateway_name: str) -> list[BarData] | None:
-        """"""
+        """优先用原接口查询历史数据，否则在 IB 支持该交易所时交给 IB，都没有则返回 None。"""
         original_gateway_name: str = self.gateway_map.get(req.vt_symbol, "")
         if original_gateway_name:
             data: list[BarData] = self._query_history(req, original_gateway_name)
@@ -181,7 +182,7 @@ class PaperEngine(BaseEngine):
             return None
 
     def send_order(self, req: OrderRequest, gateway_name: str) -> str:
-        """"""
+        """首次调用时提示委托不会发往真实接口；数量为 0 或找不到合约时返回空字符串，否则生成模拟委托并返回委托号。"""
         if not self.paper_noticed:
             self.write_log("PaperAccount模拟交易运行中，所有委托请求将不会发往交易接口")
             self.paper_noticed = True
@@ -208,7 +209,7 @@ class PaperEngine(BaseEngine):
         return vt_orderid
 
     def process_new_order_event(self, event: Event) -> None:
-        """"""
+        """校验委托并推送状态；未拒单则加入活动委托，平仓冻结有变化时推送持仓，开启立即撮合时用最新行情尝试成交。"""
         # Check if order is valid
         order: OrderData = event.data
         contract = self.main_engine.get_contract(order.vt_symbol)
@@ -239,11 +240,11 @@ class PaperEngine(BaseEngine):
                     active_orders.pop(order.orderid)
 
     def cancel_order(self, req: CancelRequest, gateway_name: str) -> None:
-        """"""
+        """推送模拟撤单事件。"""
         self.put_event(EVENT_PAPER_CANCEL_ORDER, req)
 
     def process_cancel_order_event(self, event: Event) -> None:
-        """"""
+        """撤销活动委托，平仓单再释放已冻结的仓位。"""
         req: CancelRequest = event.data
 
         active_orders: dict[str, OrderData] = self.active_orders[req.vt_symbol]
@@ -270,7 +271,7 @@ class PaperEngine(BaseEngine):
             self.put_event(EVENT_POSITION, copy(position))
 
     def send_quote(self, req: QuoteRequest, gateway_name: str) -> str:
-        """"""
+        """找不到合约时返回空字符串，否则推送模拟报价并返回报价号。"""
         contract: ContractData | None = self.main_engine.get_contract(req.vt_symbol)
         if not contract:
             self.write_log(f"报价失败，找不到该合约{req.vt_symbol}")
@@ -289,7 +290,7 @@ class PaperEngine(BaseEngine):
         return vt_quoteid
 
     def process_new_quote_event(self, event: Event) -> None:
-        """"""
+        """撤销该合约上的旧报价，并把新报价记为未成交。"""
         quote: QuoteData = event.data
         # Put old quote cancel event
         if quote.vt_symbol in self.active_quotes:
@@ -305,11 +306,11 @@ class PaperEngine(BaseEngine):
         self.put_event(EVENT_QUOTE, copy(quote))
 
     def cancel_quote(self, req: CancelRequest, gateway_name: str) -> None:
-        """"""
+        """推送模拟报价撤销事件。"""
         self.put_event(EVENT_PAPER_CANCEL_QUOTE, req)
 
     def process_cancel_quote_event(self, event: Event) -> None:
-        """"""
+        """报价号一致时撤销该合约的活动报价。"""
         req: CancelRequest = event.data
 
         quote: QuoteData | None = self.active_quotes.get(req.vt_symbol, None)
@@ -324,12 +325,12 @@ class PaperEngine(BaseEngine):
         self.put_event(EVENT_QUOTE, copy(quote))
 
     def put_event(self, event_type: str, data: object) -> None:
-        """"""
+        """向事件引擎推送事件。"""
         event: Event = Event(event_type, data)
         self.event_engine.put(event)
 
     def check_order_valid(self, order: OrderData, contract: ContractData) -> PositionData | None:
-        """"""
+        """FAK、FOK、RFQ 以及合约不支持的停止单会被拒单；平仓可用仓位不足则拒单，否则冻结对应持仓并返回该持仓。"""
         # Reject unsupported order type
         if order.type in {OrderType.FAK, OrderType.FOK, OrderType.RFQ}:
             order.status = Status.REJECTED
@@ -367,7 +368,7 @@ class PaperEngine(BaseEngine):
         return None
 
     def cross_order(self, order: OrderData, tick: TickData) -> None:
-        """"""
+        """市价、限价和停止价在价格条件满足时全部成交并更新持仓，其他类型不撮合。"""
         contract: ContractData = self.main_engine.get_contract(order.vt_symbol)
 
         trade_price = 0
@@ -417,7 +418,7 @@ class PaperEngine(BaseEngine):
             self.update_position(trade, contract)
 
     def cross_quote(self, quote: QuoteData, tick: TickData) -> None:
-        """"""
+        """最新价达到卖价则卖出平仓，达到买价则买入开仓，并更新报价和持仓。"""
         contract: ContractData | None = self.main_engine.get_contract(quote.vt_symbol)
 
         trade_price = 0
@@ -464,7 +465,7 @@ class PaperEngine(BaseEngine):
             self.update_position(trade, contract)
 
     def update_position(self, trade: TradeData, contract: ContractData) -> None:
-        """"""
+        """按净持仓或双向持仓用成交更新数量、均价和冻结量，并保存。"""
         vt_symbol: str = trade.vt_symbol
 
         # Net position mode
@@ -542,7 +543,7 @@ class PaperEngine(BaseEngine):
         self.save_data()
 
     def get_position(self, vt_symbol: str, direction: Direction) -> PositionData:
-        """"""
+        """返回已有持仓，没有则按该合约和方向创建并缓存。"""
         key: tuple = (vt_symbol, direction)
 
         if key in self.positions:
@@ -560,12 +561,12 @@ class PaperEngine(BaseEngine):
             return position
 
     def write_log(self, msg: str) -> None:
-        """"""
+        """推送模拟账户日志。"""
         log: LogData = LogData(msg=msg, gateway_name=GATEWAY_NAME)
         self.put_event(EVENT_LOG, log)
 
     def save_data(self) -> None:
-        """"""
+        """把数量不为 0 的持仓写入文件。"""
         position_data: list = []
 
         for position in self.positions.values():
@@ -583,7 +584,7 @@ class PaperEngine(BaseEngine):
         save_json(self.data_filename, position_data)
 
     def load_data(self) -> None:
-        """"""
+        """从文件恢复持仓数量和价格。"""
         position_data: dict = load_json(self.data_filename)
 
         for d in position_data:
@@ -595,7 +596,7 @@ class PaperEngine(BaseEngine):
             position.price = d["price"]
 
     def load_setting(self) -> None:
-        """"""
+        """从文件读取滑点、定时器间隔和立即撮合开关。"""
         setting: dict = load_json(self.setting_filename)
 
         if setting:
@@ -604,7 +605,7 @@ class PaperEngine(BaseEngine):
             self.instant_trade = setting["instant_trade"]
 
     def save_setting(self) -> None:
-        """"""
+        """把滑点、定时器间隔和立即撮合开关写入文件。"""
         setting: dict = {
             "trade_slippage": self.trade_slippage,
             "timer_interval": self.timer_interval,
@@ -613,7 +614,7 @@ class PaperEngine(BaseEngine):
         save_json(self.setting_filename, setting)
 
     def clear_position(self) -> None:
-        """"""
+        """把全部持仓的数量、冻结和价格清零并保存。"""
         for position in self.positions.values():
             position.volume = 0
             position.frozen = 0
@@ -623,28 +624,28 @@ class PaperEngine(BaseEngine):
         self.save_data()
 
     def set_trade_slippage(self, trade_slippage: int) -> None:
-        """"""
+        """设置成交滑点并保存配置。"""
         self.trade_slippage = trade_slippage
         self.save_setting()
 
     def set_timer_interval(self, timer_interval: int) -> None:
-        """"""
+        """设置持仓盈亏的刷新间隔并保存配置。"""
         self.timer_interval = timer_interval
         self.save_setting()
 
     def set_instant_trade(self, instant_trade: bool) -> None:
-        """"""
+        """把立即撮合开关转为布尔值并保存配置。"""
         self.instant_trade = bool(instant_trade)
         self.save_setting()
 
     def get_trade_slippage(self) -> int:
-        """"""
+        """返回成交滑点。"""
         return self.trade_slippage
 
     def get_timer_interval(self) -> int:
-        """"""
+        """返回持仓盈亏的刷新间隔。"""
         return self.timer_interval
 
     def get_instant_trade(self) -> bool:
-        """"""
+        """返回是否在下单后立即撮合。"""
         return self.instant_trade
