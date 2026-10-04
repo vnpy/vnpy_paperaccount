@@ -1,7 +1,8 @@
 """本地撮合的模拟交易引擎。"""
+from collections.abc import Callable
 from copy import copy
 from datetime import datetime
-from typing import cast
+from typing import TypedDict, cast
 from tzlocal import get_localzone_name
 
 from vnpy.event import Event, EventEngine
@@ -27,18 +28,28 @@ from vnpy.trader.constant import (
     Status,
     OrderType,
     Direction,
-    Offset
+    Offset,
+    Exchange
 )
 
 
-LOCAL_TZ = ZoneInfo(get_localzone_name())
-APP_NAME = "PaperAccount"
-GATEWAY_NAME = "PAPER"
+LOCAL_TZ: ZoneInfo = ZoneInfo(get_localzone_name())
+APP_NAME: str = "PaperAccount"
+GATEWAY_NAME: str = "PAPER"
 
-EVENT_PAPER_NEW_ORDER = "ePaperNewOrder"
-EVENT_PAPER_CANCEL_ORDER = "ePaperCancelOrder"
-EVENT_PAPER_NEW_QUOTE = "ePaperNewQuote"
-EVENT_PAPER_CANCEL_QUOTE = "ePaperCancelQuote"
+EVENT_PAPER_NEW_ORDER: str = "ePaperNewOrder"
+EVENT_PAPER_CANCEL_ORDER: str = "ePaperCancelOrder"
+EVENT_PAPER_NEW_QUOTE: str = "ePaperNewQuote"
+EVENT_PAPER_CANCEL_QUOTE: str = "ePaperCancelQuote"
+
+
+class _SavedPosition(TypedDict):
+    """文件中保存的一条模拟持仓。"""
+
+    vt_symbol: str
+    volume: float
+    price: float
+    direction: str
 
 
 class PaperEngine(BaseEngine):
@@ -66,8 +77,8 @@ class PaperEngine(BaseEngine):
         self.positions: dict[tuple[str, Direction], PositionData] = {}
 
         # Patch main engine functions
-        self._subscribe = main_engine.subscribe
-        self._query_history = main_engine.query_history
+        self._subscribe: Callable[[SubscribeRequest, str], None] = main_engine.subscribe
+        self._query_history: Callable[[HistoryRequest, str], list[BarData]] = main_engine.query_history
 
         object.__setattr__(main_engine, "subscribe", self.subscribe)
         object.__setattr__(main_engine, "query_history", self.query_history)
@@ -105,6 +116,7 @@ class PaperEngine(BaseEngine):
         self.gateway_map[contract.vt_symbol] = contract.gateway_name
         contract.gateway_name = GATEWAY_NAME
 
+        direciton: Direction
         for direciton in Direction:
             key: tuple = (contract.vt_symbol, direciton)
             if key in self.positions:
@@ -120,6 +132,8 @@ class PaperEngine(BaseEngine):
 
         active_orders: dict | None = self.active_orders.get(tick.vt_symbol, None)
         if active_orders:
+            orderid: str
+            order: OrderData
             for orderid, order in list(active_orders.items()):
                 self.cross_order(order, tick)
 
@@ -140,6 +154,7 @@ class PaperEngine(BaseEngine):
             return
         self.timer_count = 0
 
+        position: PositionData
         for position in self.positions.values():
             contract: ContractData | None = self.main_engine.get_contract(position.vt_symbol)
             if contract:
@@ -430,7 +445,7 @@ class PaperEngine(BaseEngine):
 
             direction: Direction = Direction.SHORT
             offset: Offset = Offset.CLOSE
-            volume = quote.ask_volume
+            volume: int = quote.ask_volume
 
             quote.ask_volume = 0
         elif tick.last_price <= quote.bid_price and quote.bid_volume:
@@ -478,7 +493,7 @@ class PaperEngine(BaseEngine):
             old_cost: float = position.volume * position.price
 
             if trade.direction == Direction.LONG:
-                pos_change = trade.volume
+                pos_change: float = trade.volume
             else:
                 pos_change = -trade.volume
 
@@ -498,7 +513,7 @@ class PaperEngine(BaseEngine):
                 (old_volume >= 0 and pos_change > 0)
                 or (old_volume <= 0 and pos_change < 0)
             ):
-                new_cost = old_cost + pos_change * trade.price
+                new_cost: float = old_cost + pos_change * trade.price
                 position.price = new_cost / new_volume
 
             position.volume = new_volume
@@ -551,6 +566,8 @@ class PaperEngine(BaseEngine):
         if key in self.positions:
             return self.positions[key]
         else:
+            symbol: str
+            exchange: Exchange
             symbol, exchange = extract_vt_symbol(vt_symbol)
             position: PositionData = PositionData(
                 symbol=symbol,
@@ -571,6 +588,7 @@ class PaperEngine(BaseEngine):
         """把数量不为 0 的持仓写入文件。"""
         position_data: list = []
 
+        position: PositionData
         for position in self.positions.values():
             if not position.volume:
                 continue
@@ -589,6 +607,7 @@ class PaperEngine(BaseEngine):
         """从文件恢复持仓数量和价格。"""
         position_data: dict = load_json(self.data_filename)
 
+        d: _SavedPosition
         for d in position_data:
             vt_symbol: str = d["vt_symbol"]
             direction: Direction = Direction(d["direction"])
@@ -617,6 +636,7 @@ class PaperEngine(BaseEngine):
 
     def clear_position(self) -> None:
         """把全部持仓的数量、冻结和价格清零并保存。"""
+        position: PositionData
         for position in self.positions.values():
             position.volume = 0
             position.frozen = 0
