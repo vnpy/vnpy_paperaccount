@@ -1,6 +1,7 @@
 """本地撮合的模拟交易引擎。"""
 from copy import copy
 from datetime import datetime
+from typing import cast
 from tzlocal import get_localzone_name
 
 from vnpy.event import Event, EventEngine
@@ -68,19 +69,20 @@ class PaperEngine(BaseEngine):
         self._subscribe = main_engine.subscribe
         self._query_history = main_engine.query_history
 
-        main_engine.subscribe = self.subscribe
-        main_engine.query_history = self.query_history
-        main_engine.send_order = self.send_order
-        main_engine.cancel_order = self.cancel_order
-        main_engine.send_quote = self.send_quote
-        main_engine.cancel_quote = self.cancel_quote
+        object.__setattr__(main_engine, "subscribe", self.subscribe)
+        object.__setattr__(main_engine, "query_history", self.query_history)
+        object.__setattr__(main_engine, "send_order", self.send_order)
+        object.__setattr__(main_engine, "cancel_order", self.cancel_order)
+        object.__setattr__(main_engine, "send_quote", self.send_quote)
+        object.__setattr__(main_engine, "cancel_quote", self.cancel_quote)
 
         self.load_setting()
         self.load_data()
         self.register_event()
 
+        self.ib_gateway: BaseGateway | None
         if "IB" in main_engine.get_all_gateway_names():
-            self.ib_gateway: BaseGateway = main_engine.get_gateway("IB")
+            self.ib_gateway = main_engine.get_gateway("IB")
         else:
             self.ib_gateway = None
 
@@ -212,9 +214,9 @@ class PaperEngine(BaseEngine):
         """校验委托并推送状态；未拒单则加入活动委托，平仓冻结有变化时推送持仓，开启立即撮合时用最新行情尝试成交。"""
         # Check if order is valid
         order: OrderData = event.data
-        contract = self.main_engine.get_contract(order.vt_symbol)
+        contract: ContractData = cast(ContractData, self.main_engine.get_contract(order.vt_symbol))
 
-        updated_position: PositionData = self.check_order_valid(order, contract)
+        updated_position: PositionData | None = self.check_order_valid(order, contract)
 
         # Put simulated order update event from exchange
         if order.status != Status.REJECTED:
@@ -255,7 +257,7 @@ class PaperEngine(BaseEngine):
             self.put_event(EVENT_ORDER, copy(order))
 
             # Free frozen position volume
-            contract: ContractData = self.main_engine.get_contract(order.vt_symbol)
+            contract: ContractData = cast(ContractData, self.main_engine.get_contract(order.vt_symbol))
             if contract.net_position:
                 return
 
@@ -369,9 +371,9 @@ class PaperEngine(BaseEngine):
 
     def cross_order(self, order: OrderData, tick: TickData) -> None:
         """市价、限价和停止价在价格条件满足时全部成交并更新持仓，其他类型不撮合。"""
-        contract: ContractData = self.main_engine.get_contract(order.vt_symbol)
+        contract: ContractData = cast(ContractData, self.main_engine.get_contract(order.vt_symbol))
 
-        trade_price = 0
+        trade_price: float = 0
 
         # Cross market order immediately after received
         if order.type == OrderType.MARKET:
@@ -419,9 +421,9 @@ class PaperEngine(BaseEngine):
 
     def cross_quote(self, quote: QuoteData, tick: TickData) -> None:
         """最新价达到卖价则卖出平仓，达到买价则买入开仓，并更新报价和持仓。"""
-        contract: ContractData | None = self.main_engine.get_contract(quote.vt_symbol)
+        contract: ContractData = cast(ContractData, self.main_engine.get_contract(quote.vt_symbol))
 
-        trade_price = 0
+        trade_price: float = 0
 
         if tick.last_price >= quote.ask_price and quote.ask_volume:
             trade_price = quote.ask_price
@@ -581,7 +583,7 @@ class PaperEngine(BaseEngine):
             }
             position_data.append(d)
 
-        save_json(self.data_filename, position_data)
+        save_json(self.data_filename, cast(dict, position_data))
 
     def load_data(self) -> None:
         """从文件恢复持仓数量和价格。"""
